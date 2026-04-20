@@ -1,6 +1,6 @@
 # Geographic mosaic of coevolutionary temperature: from hotspots to coldspots in mutualistic communities
 
-This repository contains the data and code used in the manuscript [Gawecka, K.A, Pedraza, F., Andreazzi, C. S., Bascompte, J. (2025) "Geographic mosaic of coevolutionary temperature: from hotspots to coldspots in mutualistic communities"](XXX).
+This repository contains the data and code used in the manuscript [Gawecka, K.A, Pedraza, F., Andreazzi, C.S., Bascompte, J. (2025) "Quantifying the geographic mosaic of coevolutionary temperature: from coldspots to hotspots"](https://www.biorxiv.org/content/10.1101/2025.11.27.691007v1.abstract).
 
 ## `Code`
 All code was created in R version 4.5.1.
@@ -12,6 +12,7 @@ All code was created in R version 4.5.1.
 `analysis.R` - analyse coevolution model output and plot manuscript figures
 
 ## `Data`
+Local interaction networks and patch data were kindly provided by Frank Jauker, Birgit Jauker and Ingo Grass ([Grass et al., 2018](https://www.nature.com/articles/s41559-018-0631-2); [Jauker et al., 2019](https://esajournals.onlinelibrary.wiley.com/doi/10.1002/ecy.2569)).
 
 `data_networks.csv` - local network metrics (output of `preprocessing.R`)
 
