@@ -11,6 +11,7 @@ library(ggpubr)
 library(ggExtra)
 library(bipartite)
 library(piecewiseSEM)
+library(ggeffects)
 
 
 # define palettes
@@ -108,28 +109,23 @@ df_RS_net = df_RS %>%
 
 # patch size and network metrics ----
 
-summary(lm(n_species~log(area_km2), data_patches_networks))
-p1 = ggplot(data=data_patches_networks, aes(x=log(area_km2), y=n_species))  +
-  geom_point() +
-  geom_smooth(method=lm, col="black") +
-  labs(x=expression(paste("ln(patch area) [", km^2,"]")),
-       y="number of species") +
-  theme(panel.background=element_rect(fill="white", colour="grey"),
-        panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
-        axis.title=element_text(size=8), axis.text=element_text(size=6))
+# patch area vs network size and connectance
 
+summary(lm(n_species~log(area_km2), data_patches_networks))
 summary(lm(n_interactions~log(area_km2), data_patches_networks))
-p2 = ggplot(data=data_patches_networks, aes(x=log(area_km2), y=n_interactions))  +
-  geom_point() +
-  geom_smooth(method=lm, col="black") +
+p1 = ggplot(data=data_patches_networks, aes(x=log(area_km2)))  +
+  geom_smooth(aes(y=n_species), method=lm, col=col_green_dark) +
+  geom_smooth(aes(y=n_interactions), method=lm, col=col_green_light) +
+  geom_point(aes(y=n_species), col=col_green_dark) +
+  geom_point(aes(y=n_interactions), col=col_green_light) +
   labs(x=expression(paste("ln(patch area) [", km^2,"]")),
-       y="number of interactions") +
+       y="number of species (dark green)\nnumber interactions (light green)") +
   theme(panel.background=element_rect(fill="white", colour="grey"),
         panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
         axis.title=element_text(size=8), axis.text=element_text(size=6))
 
 summary(lm(connectance~log(area_km2), data_patches_networks))
-p3 = ggplot(data=data_patches_networks, aes(x=log(area_km2), y=connectance))  +
+p2 = ggplot(data=data_patches_networks, aes(x=log(area_km2), y=connectance))  +
   geom_point() +
   geom_smooth(method=lm, col="black") +
   labs(x=expression(paste("ln(patch area) [", km^2,"]")),
@@ -138,28 +134,74 @@ p3 = ggplot(data=data_patches_networks, aes(x=log(area_km2), y=connectance))  +
         panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
         axis.title=element_text(size=8), axis.text=element_text(size=6))
 
-summary(lm(nestedness_Z~log(area_km2), data_patches_networks))
-p4 = ggplot(data=data_patches_networks, aes(x=log(area_km2), y=nestedness_Z))  +
-  geom_point() +
-  geom_smooth(method=lm, col="black") +
-  labs(x=expression(paste("ln(patch area) [", km^2,"]")),
-       y="nestedness (Z-score)") +
+ggarrange(p1, p2, nrow=1, ncol=2, labels=c("A","B"))
+
+
+# dependence of nestedness and modularity on patch area
+
+m_nest = lm(nestedness_obs~n_species+connectance, data_patches_networks)
+m_mod = lm(modularity_obs~n_species+connectance, data_patches_networks)
+summary(m_nest)
+summary(m_mod)
+
+nest_species = ggpredict(m_nest, terms="n_species", type="fixed")
+nest_conn    = ggpredict(m_nest, terms="connectance", type="fixed")
+mod_species  = ggpredict(m_mod, terms="n_species", type="fixed")
+mod_conn     = ggpredict(m_mod, terms="connectance", type="fixed")
+
+data_patches_networks$partial_nest_nspecies = resid(m_nest) + 
+  predict(m_nest, newdata=data.frame(n_species=data_patches_networks$n_species,
+                                     connectance = mean(data_patches_networks$connectance)))
+data_patches_networks$partial_nest_conn = resid(m_nest) +
+  predict(m_nest, newdata=data.frame(n_species=mean(data_patches_networks$n_species),
+                                     connectance=data_patches_networks$connectance))
+data_patches_networks$partial_mod_nspecies = resid(m_mod) + 
+  predict(m_mod, newdata=data.frame(n_species=data_patches_networks$n_species,
+                                    connectance = mean(data_patches_networks$connectance)))
+data_patches_networks$partial_mod_conn = resid(m_mod) +
+  predict(m_mod, newdata=data.frame(n_species=mean(data_patches_networks$n_species),
+                                    connectance=data_patches_networks$connectance))
+
+p1 = ggplot() +
+  geom_point(data=data_patches_networks, aes(x=n_species, y=partial_nest_nspecies)) +
+  geom_line(data=nest_species, aes(x=x, y=predicted)) +
+  geom_ribbon(data=nest_species, aes(x=x, ymin=conf.low, ymax=conf.high), alpha = 0.2) +
+  labs(x="number of species", y="nestedness") +
   theme(panel.background=element_rect(fill="white", colour="grey"),
         panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
         axis.title=element_text(size=8), axis.text=element_text(size=6))
 
-summary(lm(modularity_Z~log(area_km2), data_patches_networks))
-p5 = ggplot(data=data_patches_networks, aes(x=log(area_km2), y=modularity_Z))  +
-  geom_point() +
-  #geom_smooth(method=lm, col="black") +
-  labs(x=expression(paste("ln(patch area) [", km^2,"]")),
-       y="modularity (Z-score)") +
+p2 = ggplot() +
+  geom_point(data=data_patches_networks, aes(x=connectance, y=partial_nest_conn)) +
+  geom_line(data=nest_conn, aes(x=x, y=predicted)) +
+  geom_ribbon(data=nest_conn, aes(x=x, ymin=conf.low, ymax=conf.high), alpha = 0.2) +
+  labs(x="connectance", y="nestedness") +
   theme(panel.background=element_rect(fill="white", colour="grey"),
         panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
         axis.title=element_text(size=8), axis.text=element_text(size=6))
 
-ggarrange(p1, p2, p4, p5, p3, nrow=3, ncol=2, labels=c("A","B","C","D","E"))
+p3 = ggplot() +
+  geom_point(data=data_patches_networks, aes(x=n_species, y=partial_mod_nspecies)) +
+  geom_line(data=mod_species, aes(x=x, y=predicted)) +
+  geom_ribbon(data=mod_species, aes(x=x, ymin=conf.low, ymax=conf.high), alpha = 0.2) +
+  labs(x="number of species", y="modularity") +
+  theme(panel.background=element_rect(fill="white", colour="grey"),
+        panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
+        axis.title=element_text(size=8), axis.text=element_text(size=6))
 
+p4 = ggplot() +
+  geom_point(data=data_patches_networks, aes(x=connectance, y=partial_mod_conn)) +
+  geom_line(data=mod_conn, aes(x=x, y=predicted)) +
+  geom_ribbon(data=mod_conn, aes(x=x, ymin=conf.low, ymax=conf.high), alpha = 0.2) +
+  labs(x="connectance", y="modularity") +
+  theme(panel.background=element_rect(fill="white", colour="grey"),
+        panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
+        axis.title=element_text(size=8), axis.text=element_text(size=6))
+
+ggarrange(p1, p2, p3, p4, nrow=2, ncol=2, labels=c("A","B","C","D"))
+
+
+# patch locations and network sizes
 
 ggplot(data=data_patches_networks, 
        aes(x=E/1000, y=N/1000, col=n_interactions, size=area_km2)) +
@@ -310,33 +352,79 @@ m_data = df_RS_net %>%
   filter(., Minc==1) %>% 
   mutate(area_log=log(area_km2))
 
-# area | PC1 & nestedness & modularity | R & S
+# area | n_species & connectance | nestedness & modularity | R & S
 sem1 = psem(
   # causal paths:
-  lm(data=m_data, PC1 ~ area_log),
-  lm(data=m_data, nestedness_Z ~ area_log),
-  lm(data=m_data, modularity_Z ~ area_log),
-  lm(data=m_data, R_mean ~ PC1 + nestedness_Z + modularity_Z),
-  lm(data=m_data, S_mean ~ PC1 + nestedness_Z + modularity_Z),
+  lm(data=m_data, n_species ~ area_log),
+  lm(data=m_data, connectance ~ area_log),
+  lm(data=m_data, nestedness_obs ~ n_species + connectance),
+  lm(data=m_data, modularity_obs ~ n_species + connectance),
+  lm(data=m_data, R_mean ~ n_species + connectance + nestedness_obs + modularity_obs),
+  lm(data=m_data, S_mean ~ n_species + connectance + nestedness_obs + modularity_obs),
   # covariance terms:
-  PC1 %~~% nestedness_Z,
-  PC1 %~~% modularity_Z,
-  nestedness_Z %~~% modularity_Z
+  n_species %~~% connectance,
+  nestedness_obs %~~% modularity_obs
 )
 summary(sem1)
 summary(sem1)$dTable
 
-# area | PC1 & nestedness & modularity | deg_sym | R & S
+
+# area | n_species & connectance | nestedness & modularity | R & S
 sem2 = psem(
-  lm(data=m_data, PC1 ~ area_log),
-  lm(data=m_data, nestedness_Z ~ area_log),
-  lm(data=m_data, modularity_Z ~ area_log),
-  lm(data=m_data, deg_sym_mean ~ PC1 + nestedness_Z + modularity_Z),
-  lm(data=m_data, R_mean ~ deg_sym_mean + PC1 + nestedness_Z + modularity_Z),
-  lm(data=m_data, S_mean ~ deg_sym_mean + PC1 + nestedness_Z + modularity_Z),
-  PC1 %~~% nestedness_Z,
-  PC1 %~~% modularity_Z,
-  nestedness_Z %~~% modularity_Z
+  # causal paths:
+  lm(data=m_data, n_species ~ area_log),
+  lm(data=m_data, connectance ~ area_log),
+  lm(data=m_data, nestedness_obs ~ area_log + n_species + connectance),
+  lm(data=m_data, modularity_obs ~ area_log + n_species + connectance),
+  lm(data=m_data, R_mean ~ n_species + connectance + nestedness_obs + modularity_obs),
+  lm(data=m_data, S_mean ~ n_species + connectance + nestedness_obs + modularity_obs),
+  # covariance terms:
+  n_species %~~% connectance,
+  nestedness_obs %~~% modularity_obs
 )
 summary(sem2)
 summary(sem2)$dTable
+
+
+# area | n_species & connectance | nestedness & modularity | deg_sym | R & S
+sem3 = psem(
+  lm(data=m_data, n_species ~ area_log),
+  lm(data=m_data, connectance ~ area_log),
+  lm(data=m_data, nestedness_obs ~ n_species + connectance),
+  lm(data=m_data, modularity_obs ~ n_species + connectance),
+  lm(data=m_data, deg_sym_mean ~ n_species + connectance + nestedness_obs + modularity_obs),
+  lm(data=m_data, R_mean ~ deg_sym_mean + n_species + connectance + nestedness_obs + modularity_obs),
+  lm(data=m_data, S_mean ~ deg_sym_mean + n_species + connectance + nestedness_obs + modularity_obs),
+  n_species %~~% connectance,
+  nestedness_obs %~~% modularity_obs
+)
+summary(sem3)
+summary(sem3)$dTable
+
+
+# area | n_species & connectance | nestedness (NODFc) & modularity | R & S
+sem4 = psem(
+  # causal paths:
+  lm(data=m_data, n_species ~ area_log),
+  lm(data=m_data, connectance ~ area_log),
+  lm(data=m_data, nestedness_NODFc ~ n_species + connectance),
+  lm(data=m_data, modularity_obs ~ n_species + connectance),
+  lm(data=m_data, R_mean ~ n_species + connectance + nestedness_NODFc + modularity_obs),
+  lm(data=m_data, S_mean ~ n_species + connectance + nestedness_NODFc + modularity_obs),
+  # covariance terms:
+  n_species %~~% connectance,
+  nestedness_NODFc %~~% modularity_obs
+)
+summary(sem4)
+summary(sem4)$dTable
+
+
+# principal component analysis ----
+
+pca = PCA(m_data %>% 
+            select(n_species, connectance, nestedness_NODFc, modularity_obs,
+                   area_log, R_mean, S_mean) %>%
+            rename("patch area"=area_log, "species richness"=n_species, 
+                   "nestedness (NODFc)"=nestedness_NODFc, modularity=modularity_obs, 
+                   reciprocity=R_mean, strength=S_mean), 
+          graph=TRUE)

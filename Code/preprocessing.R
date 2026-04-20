@@ -12,6 +12,7 @@ rm(list=ls())
 library(dplyr)
 library(igraph)
 library(FactoMineR)
+library(nnet)
 
 
 # define interaction network names
@@ -21,137 +22,184 @@ networks = c("01","02","03","04","05","06","07","08","09","10",
              "31","32")
 
 
-# function for computing nestedness
+# function for computing nestedness (Fortuna et al., 2019, Evolution)
 compute_nestedness = function(B){
   
   # Get number of rows and columns
-  nrows <- nrow(B)
-  ncols <- ncol(B)
+  nrows = nrow(B)
+  ncols = ncol(B)
   
   # Compute nestedness of rows
-  nestedness_rows <- 0
+  nestedness_rows = 0
   for(i in 1:(nrows-1)){
     for(j in (i+1): nrows){
       
-      c_ij <- sum(B[i,] * B[j,])      # Number of interactions shared by i and j
-      k_i <- sum(B[i,])               # Degree of node i
-      k_j <- sum(B[j,])               # Degree of node j
+      c_ij = sum(B[i,] * B[j,])      # Number of interactions shared by i and j
+      k_i = sum(B[i,])               # Degree of node i
+      k_j = sum(B[j,])               # Degree of node j
       
       if (k_i == 0 || k_j==0) {next}  # Handle case if a node is disconnected
       
-      o_ij <- c_ij / min(k_i, k_j)    # Overlap between i and j
+      o_ij = c_ij / min(k_i, k_j)    # Overlap between i and j
       
-      nestedness_rows <- nestedness_rows + o_ij
+      nestedness_rows = nestedness_rows + o_ij
     }
   }
   
   # Compute nestedness of columns
-  nestedness_cols <- 0
+  nestedness_cols = 0
   for(i in 1: (ncols-1)){
     for(j in (i+1): ncols){
       
-      c_ij <- sum(B[,i] * B[,j])      # Number of interactions shared by i and j
-      k_i <- sum(B[,i])               # Degree of node i
-      k_j <- sum(B[,j])               # Degree of node j
+      c_ij = sum(B[,i] * B[,j])      # Number of interactions shared by i and j
+      k_i = sum(B[,i])               # Degree of node i
+      k_j = sum(B[,j])               # Degree of node j
       if (k_i == 0 || k_j==0) {next}  # Handle case if a node is disconnected.
       
-      o_ij <- c_ij / min(k_i, k_j)    # Overlap between i and j
+      o_ij = c_ij / min(k_i, k_j)    # Overlap between i and j
       
-      nestedness_cols <- nestedness_cols + o_ij         
+      nestedness_cols = nestedness_cols + o_ij         
     }
   }
   
   # Compute nestedness of the network
-  nestedness <- (nestedness_rows + nestedness_cols) / ((nrows * (nrows - 1) / 2) + (ncols * (ncols - 1) / 2))
+  nestedness = (nestedness_rows + nestedness_cols) / ((nrows * (nrows - 1) / 2) + (ncols * (ncols - 1) / 2))
   
   return(nestedness)
 }
 
-# function for probabilistic cell null model
-# (for standardising nestedness and modularity)
-cell_model = function(d,t_max){
+# functions for computing combined NODF nestedness (Song et al., 2017, J Anim Ecol)
+nestedness_NODF = function(web){
+  web[web > 0] = 1
+  SA = nrow(web)
+  SP = ncol(web)
+  N = t(web) %*% web
+  num = N
+  num[lower.tri(num,diag=TRUE)]=1
+  den = (matrix(1,nrow=SP,ncol=1)*diag(N))%*%matrix(1,nrow=1,ncol=SP)
+  dele = den - t(den)
+  dele[lower.tri(dele,diag=TRUE)] = 1
+  num[dele == 0] = 0
+  den = pmin(den,t(den))
+  den[lower.tri(den,diag=TRUE)] = 1
+  nes = num/den
+  nes[lower.tri(nes,diag=TRUE)] = 0
+  nes[is.na(nes)] = 0
+  n1 = sum(nes)
   
-  rows = nrow(d)
-  columns = ncol(d)
-  
-  t=1
-  
-  null_nest = rep(NA,t_max)
-  null_mod = rep(NA,t_max)
-  
-  while (t <= t_max){
-    
-    PR = matrix(0, rows, 1)
-    PC = matrix(0, columns, 1)
-    B = matrix(0, rows, columns)
-    
-    for (i in 1:rows){
-      number_ones=0
-      for (j in 1:columns){
-        if(d[i,j] == 1){
-          number_ones=number_ones+1
-        }
-      }
-      PR[i] = number_ones/columns
+  N = web %*% t(web)
+  num = N
+  num[lower.tri(num,diag=TRUE)]=1
+  den = (matrix(1,nrow=SA,ncol=1)*diag(N))%*%matrix(1,nrow=1,ncol=SA)
+  dele = den - t(den)
+  dele[lower.tri(dele,diag=TRUE)] = 1
+  num[dele ==0 ] = 0
+  den = pmin(den,t(den))
+  den[lower.tri(den,diag=TRUE)]=1
+  nes = num/den
+  nes[lower.tri(nes,diag=TRUE)] = 0
+  nes[is.na(nes)] = 0
+  n2 = sum(nes)
+  out = 2*(n1 + n2) / (SA*(SA-1)+SP*(SP-1))
+  return(out)
+}
+max_nest = function(web){
+  #binarize the interaction matrix
+  web_binary = web
+  web_binary[web_binary > 0] = 1
+  #compute the number of pollinators, plants and interactions
+  SA = nrow(web_binary)
+  SP = ncol(web_binary)
+  SI = floor(sum(web_binary))
+  #initialize the interaction matrix with minimum requirements
+  web_opt = matrix(0, nrow=SA, ncol=SP)  
+  web_opt[1,] = 1
+  web_opt[,1] = 1
+  web_opt[2,2] = 1
+  #counting the number of
+  SI_left = SI-SP-SA
+  if(SI_left>0){
+    #search the best possible location
+    for(j in 1:SI_left){
+      #compare all possible locations and the maximum one
+      position_potential = websearch_NODF(web_opt)
+      nest_poten = c()
+      for(i in 1:nrow(position_potential)) {
+        web_poten = web_opt
+        web_poten[position_potential[i,1],position_potential[i,2]] = 1
+        nest_poten[i] = nestedness_NODF(web_poten)
+      } 
+      position_the = which.is.max(nest_poten)
+      web_opt[position_potential[position_the,1],position_potential[position_the,2]] = 1
     }
-    
-    for (j in 1:columns){
-      number_ones=0
-      for (i in 1:rows){
-        if(d[i,j] == 1){
-          number_ones=number_ones+1
-        }
-      }
-      PC[j] = number_ones/rows
-    }
-    
-    for (i in 1:rows){
-      for (j in 1:columns){
-        p = ( PR[i]+PC[j] )/2;
-        r = runif(1) 
-        if(r < p){  
-          B[i,j] = 1;
-        }
-      }
-      
-    }
-    
-    # remove unconected species if present
-    B = bipartite::empty(B)
-    
-    # skip if network has fewer than 2 rows or columns
-    if(nrow(B)<2 || ncol(B)<2) {next}
-    
-    # compute nestedness
-    null_nest[t] = compute_nestedness(B)
-    
-    # convert to igraph and calculate modularity
-    graph = graph_from_incidence_matrix(B)
-    modules = cluster_louvain(graph)
-    null_mod[t] = modularity(modules)
-    
-    t=t+1
-    
+    return(nestedness_NODF(web_opt))
   }
-  
-  # unlist results 
-  null_nest = unlist(null_nest)
-  null_mod = unlist(null_mod)
-  
-  return(list(null_nest, null_mod))
-  
+  #this is to prevent the trivial case
+  else{
+    return(-1)
+  }
+}
+websearch_NODF = function(web){
+  SA = nrow(web)
+  SP = ncol(web)
+  domain = web
+  position = which(domain == 1, arr.ind=T)
+  position = subset(position, position[,2] != 1)
+  position = subset(position, position[,1] != 1)
+  boundary = matrix(0, nrow=2*nrow(position),ncol=2)
+  j=1
+  #choose boundary points
+  for(i in 1:nrow(position)){
+    if(position[i,1]<nrow(domain)&&position[i,2]<ncol(domain))
+      if(domain[position[i,1]+1,position[i,2]]+
+         domain[position[i,1]-1,position[i,2]]+
+         domain[position[i,1],position[i,2]+1]+
+         domain[position[i,1],position[i,2]-1]<=3){
+        boundary[j,1] = position[i,1]+1
+        boundary[j,2] = position[i,2]
+        boundary[j+1,1] = position[i,1]
+        boundary[j+1,2] = position[i,2]+1
+        j = j+2
+      } 
+  }
+  #delete those with zero entries which entered as auxiliary in the first place
+  keep = c()
+  for(i in 1:nrow(boundary)){
+    if(boundary[i,1]+boundary[i,2]>0) keep = append(keep,i)
+  }
+  boundary = boundary[keep,]
+  #choose true boundary points
+  stay = c()
+  for(i in 1:nrow(boundary)){
+    if(boundary[i,1]<SA&&boundary[i,2]<SP){
+      if(domain[boundary[i,1]+1,boundary[i,2]]+
+         domain[boundary[i,1]-1,boundary[i,2]]+
+         domain[boundary[i,1],boundary[i,2]+1]+
+         domain[boundary[i,1],boundary[i,2]-1]==2
+         && domain[boundary[i,1],boundary[i,2]]==0){
+        stay = append(stay,i)
+      }
+    }
+  }
+  boundary = boundary[stay,]
+  return(boundary)
+}
+comb_nest = function(web,NODF,max_NODF){
+  C = sum(web)/(ncol(web)*nrow(web))
+  S = sqrt(ncol(web) * nrow(web) )
+  out = NODF / (max_NODF * C * log10(S))
+  return(out)
 }
 
 
 # initialise dataframe for storing local network metrics
 data_networks = data.frame(network=networks,
-                          n_species=NA,      # number of species
-                          n_interactions=NA, # number of interactions
-                          connectance=NA,    # connectance
-                          nestedness_obs=NA, # observed nestedness
-                          nestedness_Z=NA,   # standardised nestedness
-                          modularity_obs=NA, # observed modulatiry
-                          modularity_Z=NA)   # standardised modularity
+                           n_species=NA,       # number of species
+                           n_interactions=NA,  # number of interactions
+                           connectance=NA,     # connectance
+                           nestedness_obs=NA,  # observed nestedness
+                           nestedness_NODFc=NA,# combined NODF nestedness
+                           modularity_obs=NA)  # observed modulatiry
 
 # initialise dataframe for storing local species data
 data_species = data.frame(network=character(),
@@ -179,34 +227,25 @@ for(n in networks){
   # nestedness - observed
   nestedness_obs = compute_nestedness(Minc)
   
+  # nestedness - observed NODF (Song et al, 2017, J Anim Ecol)
+  nestedness_obs_NODF = nestedness_NODF(Minc)
+  
+  # nestedness - maximum NODF (Song et al, 2017, J Anim Ecol)
+  max_NODF = max_nest(Minc)
+  
+  # nestedness - combined NODF (Song et al, 2017, J Anim Ecol)
+  nestedness_comb_NODF = comb_nest(Minc,nestedness_obs_NODF,max_NODF)
+  
   # modularity - observed
   graph = graph_from_incidence_matrix(Minc)
   modules = cluster_louvain(graph)
   modularity_obs = modularity(modules)
   
-  # run cell null model with current network and 100 replicates
-  null_output = cell_model(Minc,100)
-  null_nest = null_output[[1]]
-  null_mod = null_output[[2]]
-  
-  # compute mean of nestedness and modularity
-  mean_nest = mean(null_nest, na.rm=TRUE)
-  mean_mod = mean(null_mod, na.rm=TRUE)
-  
-  # compute standard devation of nestedness and modularity
-  sd_nest = sd(null_nest, na.rm=TRUE)
-  sd_mod = sd(null_mod, na.rm=TRUE)
-  
-  # compute zscore for nestedness and modularity
-  z_score_nest = (nestedness_obs - mean_nest) / sd_nest
-  z_score_mod = (modularity_obs - mean_mod) / sd_mod
-  
   # store nestedness and modularity
   data_networks[data_networks$network==n,"nestedness_obs"] = nestedness_obs
-  data_networks[data_networks$network==n,"nestedness_Z"] = z_score_nest
+  data_networks[data_networks$network==n,"nestedness_NODFc"] = nestedness_comb_NODF
   data_networks[data_networks$network==n,"modularity_obs"] = modularity_obs
-  data_networks[data_networks$network==n,"modularity_Z"] = z_score_mod
-  
+
   # store local species data
   data_species = rbind(data_species,
                        data.frame(network=n, guild="resource", species=1:nrow(Minc),
@@ -216,16 +255,6 @@ for(n in networks){
                                   species_name=colnames(Minc), 
                                   degree=colSums(Minc), row.names=NULL))
 }
-
-
-# Principal Component Analysis
-pca = PCA(data_networks %>% select(n_species, n_interactions, connectance), graph=TRUE)
-pca$eig
-pca$var$coord
-
-# store PC1 in dataframe
-data_networks = data_networks %>%
-  mutate(PC1 = pca$ind$coord[,1])
 
 
 # write out postprocessing results
