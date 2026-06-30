@@ -12,6 +12,7 @@ library(ggExtra)
 library(bipartite)
 library(piecewiseSEM)
 library(ggeffects)
+library(FactoMineR)
 
 
 # define palettes
@@ -109,6 +110,32 @@ df_RS_net = df_RS %>%
 
 # patch size and network metrics ----
 
+# patch locations and network sizes
+
+# Figure S1
+ggplot(data=data_patches_networks, 
+       aes(x=E/1000, y=N/1000, col=n_interactions, size=area_km2)) +
+  geom_point() +
+  geom_text(aes(label=network), hjust=-0.1, vjust=-0.1, col="grey", size=3) +
+  scale_color_gradient(low=col_green_light, high=col_green_dark) +
+  scale_size_continuous(range=c(1,5)) +
+  coord_fixed() +
+  scale_x_continuous(breaks=seq(min(data_patches_networks$E/1000),
+                                max(data_patches_networks$E/1000),5)) +
+  scale_y_continuous(breaks=seq(min(data_patches_networks$N/1000),
+                                max(data_patches_networks$N/1000),5)) +
+  labs(col="number of\ninteractions", size="patch area\n(km2)") +
+  theme(axis.title=element_blank(), axis.text=element_blank(),
+        axis.ticks=element_blank(),
+        panel.background=element_rect(fill=NA, colour="lightgrey"),
+        panel.grid=element_blank(),
+        plot.background=element_rect(fill=NA),
+        legend.title=element_text(size=8), legend.text=element_text(size=6), 
+        legend.key=element_blank(), 
+        legend.position="none",
+        legend.box="vertical", legend.spacing.y=unit(1,"mm"))
+
+
 # patch area vs network size and connectance
 
 summary(lm(n_species~log(area_km2), data_patches_networks))
@@ -134,6 +161,7 @@ p2 = ggplot(data=data_patches_networks, aes(x=log(area_km2), y=connectance))  +
         panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
         axis.title=element_text(size=8), axis.text=element_text(size=6))
 
+# Figure S2
 ggarrange(p1, p2, nrow=1, ncol=2, labels=c("A","B"))
 
 
@@ -198,32 +226,8 @@ p4 = ggplot() +
         panel.grid.major=element_blank(), panel.grid.minor=element_blank(),
         axis.title=element_text(size=8), axis.text=element_text(size=6))
 
+# Figure S3
 ggarrange(p1, p2, p3, p4, nrow=2, ncol=2, labels=c("A","B","C","D"))
-
-
-# patch locations and network sizes
-
-ggplot(data=data_patches_networks, 
-       aes(x=E/1000, y=N/1000, col=n_interactions, size=area_km2)) +
-  geom_point() +
-  geom_text(aes(label=network), hjust=-0.1, vjust=-0.1, col="grey", size=3) +
-  scale_color_gradient(low=col_green_light, high=col_green_dark) +
-  scale_size_continuous(range=c(1,5)) +
-  coord_fixed() +
-  scale_x_continuous(breaks=seq(min(data_patches_networks$E/1000),
-                                max(data_patches_networks$E/1000),5)) +
-  scale_y_continuous(breaks=seq(min(data_patches_networks$N/1000),
-                                max(data_patches_networks$N/1000),5)) +
-  labs(col="number of\ninteractions", size="patch area\n(km2)") +
-  theme(axis.title=element_blank(), axis.text=element_blank(),
-        axis.ticks=element_blank(),
-        panel.background=element_rect(fill=NA, colour="lightgrey"),
-        panel.grid=element_blank(),
-        plot.background=element_rect(fill=NA),
-        legend.title=element_text(size=8), legend.text=element_text(size=6), 
-        legend.key=element_blank(), 
-        legend.position="none",
-        legend.box="vertical", legend.spacing.y=unit(1,"mm"))
 
 
 # coevolutionary temperature mosaic ----
@@ -240,6 +244,7 @@ data_plot_int = filter(df_RS_int, Minc==1) %>%
 # subset data for plotting - network average
 data_plot_net = filter(df_RS_net, Minc==1)
 
+# Figure 2A
 ggplot(data=data_plot_net, 
        aes(x=E/1000, y=N/1000, col=R_mean, size=S_mean)) +
   geom_point() +
@@ -261,7 +266,7 @@ ggplot(data=data_plot_net,
         legend.key=element_blank(), legend.position="bottom", 
         legend.box="vertical", legend.spacing.y=unit(1,"mm"))
 
-
+# Figure 2B
 plot_net = "15" # 15, 24
 
 p = ggMarginal(
@@ -342,16 +347,19 @@ p2 = ggplot(data=data_plot_int,
         legend.text=element_text(size=8), 
         legend.key=element_blank(), legend.position="bottom")
 
+# Figure 4
 ggarrange(p1, p2, nrow=2, labels=c("A","B"), common.legend=TRUE, legend="bottom")
 
 
-# structural equation model ----
+# structural equation models ----
 
 # subset data
 m_data = df_RS_net %>%
   filter(., Minc==1) %>% 
   mutate(area_log=log(area_km2))
 
+
+# Figure 3, Table S1
 # area | n_species & connectance | nestedness & modularity | R & S
 sem1 = psem(
   # causal paths:
@@ -369,6 +377,7 @@ summary(sem1)
 summary(sem1)$dTable
 
 
+# Figure S4
 # area | n_species & connectance | nestedness & modularity | R & S
 sem2 = psem(
   # causal paths:
@@ -386,6 +395,7 @@ summary(sem2)
 summary(sem2)$dTable
 
 
+# Figure S5
 # area | n_species & connectance | nestedness & modularity | deg_sym | R & S
 sem3 = psem(
   lm(data=m_data, n_species ~ area_log),
@@ -402,6 +412,7 @@ summary(sem3)
 summary(sem3)$dTable
 
 
+# Figure S6
 # area | n_species & connectance | nestedness (NODFc) & modularity | R & S
 sem4 = psem(
   # causal paths:
@@ -421,10 +432,12 @@ summary(sem4)$dTable
 
 # principal component analysis ----
 
+# Figure S7
 pca = PCA(m_data %>% 
             select(n_species, connectance, nestedness_NODFc, modularity_obs,
                    area_log, R_mean, S_mean) %>%
             rename("patch area"=area_log, "species richness"=n_species, 
                    "nestedness (NODFc)"=nestedness_NODFc, modularity=modularity_obs, 
                    reciprocity=R_mean, strength=S_mean), 
-          graph=TRUE)
+          graph=FALSE)
+plot(pca, choix = "var")
