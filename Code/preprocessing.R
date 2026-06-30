@@ -11,7 +11,6 @@ rm(list=ls())
 # import libraries
 library(dplyr)
 library(igraph)
-library(FactoMineR)
 library(nnet)
 
 
